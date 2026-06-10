@@ -1,0 +1,123 @@
+# Detection Rules for Fraud and Bot Detection
+# Each rule is a condition evaluated against derived signals
+# Conditions use Python boolean syntax over signals dict
+
+# Rule 1: Datacenter ASN hitting voucher endpoints at high velocity
+- id: dc_asn_voucher_abuse
+  description: Datacenter-origin traffic hitting voucher redemption at high velocity
+  severity: high
+  weight: 40
+  condition: signals.asn_type == 'hosting' and signals.path_class == 'voucher' and signals.ip_req_rate_1m > 15
+  action: block
+  enabled: true
+  owner: security-analyst
+
+# Rule 2: Credential stuffing detection (high 401 rates)
+- id: credential_stuffing_401_burst
+  description: High rate of 401 Unauthorized responses from single IP (credential stuffing indicator)
+  severity: high
+  weight: 35
+  condition: signals.status_code == 401 and signals.ip_req_rate_1m > 10
+  action: block
+  enabled: true
+  owner: security-analyst
+
+# Rule 3: Tor exit node abuse
+- id: tor_exit_suspicious_activity
+  description: Request from Tor exit node with suspicious patterns
+  severity: medium
+  weight: 25
+  condition: signals.is_tor_exit and (signals.path_class == 'voucher' or signals.ua_is_bot)
+  action: challenge
+  enabled: true
+  owner: security-analyst
+
+# Rule 4: Bot-like user-agent
+- id: bot_ua_detection
+  description: Request with bot-like user-agent attempting protected endpoints
+  severity: medium
+  weight: 20
+  condition: signals.ua_is_bot and signals.path_class in ['voucher', 'auth', 'api']
+  action: challenge
+  enabled: true
+  owner: security-analyst
+
+# Rule 5: IP reputation (flagged by multiple threat feeds)
+- id: ip_reputation_multi_feed_hit
+  description: IP flagged by 2+ threat intelligence feeds
+  severity: high
+  weight: 30
+  condition: signals.flagged_feed_count >= 2
+  action: block
+  enabled: true
+  owner: security-analyst
+
+# Rule 6: Account hijacking - unusual IP
+- id: account_hijack_unusual_ip_asn
+  description: Account accessing from datacenter when previously only residential
+  severity: medium
+  weight: 20
+  condition: signals.asn_type == 'hosting' and signals.account_unique_ips > 1 and signals.account_is_new == False
+  action: challenge
+  enabled: true
+  owner: security-analyst
+
+# Rule 7: Language-Geography mismatch
+- id: suspicious_geo_lang_mismatch
+  description: Request with significant geo-language mismatch and high velocity
+  severity: low
+  weight: 15
+  condition: signals.lang_geo_mismatch and signals.ip_req_rate_1m > 20
+  action: challenge
+  enabled: true
+  owner: security-analyst
+
+# Rule 8: Single IP, multiple accounts (account farm indicator)
+- id: account_farm_single_ip
+  description: Single IP accessing many accounts (account farm indicator)
+  severity: high
+  weight: 35
+  condition: signals.ip_unique_accounts > 10
+  action: block
+  enabled: true
+  owner: security-analyst
+
+# Rule 9: Health check bot (should never block these)
+- id: health_check_whitelist
+  description: Health check requests are always allowed
+  severity: low
+  weight: -50  # Negative weight to reduce score
+  condition: signals.path_class == 'health'
+  action: allow
+  enabled: true
+  owner: security-analyst
+
+# Rule 10: Extreme velocity from single IP
+- id: ddos_velocity_extreme
+  description: Extreme request velocity from single IP (DDoS indicator)
+  severity: critical
+  weight: 50
+  condition: signals.ip_req_rate_1m > 50
+  action: block
+  enabled: true
+  owner: security-analyst
+
+# Rule 11: Mobile device consistency (low risk)
+- id: mobile_device_consistency
+  description: Mobile device with consistent fingerprints (lower risk)
+  severity: low
+  weight: -10  # Slight reduction
+  condition: signals.ua_is_mobile and signals.ip_unique_ja3s <= 2
+  action: allow
+  enabled: true
+  owner: security-analyst
+
+# Rule 12: VPN/Proxy usage with suspicious activity
+- id: vpn_proxy_suspicious
+  description: Request from known VPN/proxy ASN with high velocity
+  severity: medium
+  weight: 20
+  condition: signals.is_flagged and signals.ip_req_rate_1m > 25
+  action: challenge
+  enabled: true
+  owner: security-analyst
